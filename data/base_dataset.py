@@ -101,6 +101,7 @@ def get_transform(opt, params=None, grayscale=False, method=transforms.Interpola
     if not opt.no_flip:
         if params is None:
             transform_list.append(transforms.RandomHorizontalFlip())
+            transform_list.append(transforms.RandomVerticalFlip())
         elif params["flip"]:
             transform_list.append(transforms.Lambda(lambda img: __flip(img, params["flip"])))
 
