@@ -6,7 +6,7 @@ from torch.optim import lr_scheduler
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
-
+from types import SimpleNamespace
 
 ###############################################################################
 # Helper Functions
@@ -161,32 +161,40 @@ def define_frozen_detector(detector_pt,num_classes=2, device = "cuda"):
 
 def define_yolo(path_to_best_pt):
     from ultralytics import YOLO
+    import os
     yolo = YOLO(path_to_best_pt)
-    net = yolo.model                 
-    net.eval()
-    m = net.model[-1]  
+    net = yolo.model
+    if "LOCAL_RANK" in os.environ:
+            local_rank = int(os.environ["LOCAL_RANK"])
+            net.to(local_rank)
+            print(f"Initialized with device cuda:{local_rank}")
+    else:
+        net.to(0)
+        print("Initialized with device cuda:0")
+    yolo.model = net
+    yolo.model.eval()
+    m = yolo.model.model[-1]  
     
     print("\nYOLO args : ")
     print("nc:", m.nc, "reg_max:", getattr(m, "reg_max", 1), "stride:", m.stride)
-    print("has args:", hasattr(net, "args"),"\n")  
+    print("has args:", hasattr(yolo.model, "args"),"\n")  
 
-    for p in net.parameters():
+    for p in yolo.model.parameters():
         p.requires_grad = False      
 
-    h = net.args
+    h = yolo.model.args
     if isinstance(h, dict):
         
         box = h.get("box", 7.5)
         cls = h.get("cls", 0.5)
         dfl = h.get("dfl", 1.5)
 
-        net.args = SimpleNamespace(**h)
-        net.args.box = box
-        net.args.cls = cls
-        net.args.dfl = dfl
-    crit = v8DetectionLoss(model=yolo.model)  
+        yolo.model.args = SimpleNamespace(**h)
+        yolo.model.args.box = box
+        yolo.model.args.cls = cls
+        yolo.model.args.dfl = dfl
 
-    return net,crit 
+    return yolo
 
 
 

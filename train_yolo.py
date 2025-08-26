@@ -9,7 +9,7 @@ if __name__ =="__main__":
         epochs = 150,
         patience = 50,
         project = 'runs',
-        name = 'yolo',
+        name = 'yolo_pre_process_2_less_empty',
         # single_cls = True,
         # multi_scale = True,
         # cos_lr = True,

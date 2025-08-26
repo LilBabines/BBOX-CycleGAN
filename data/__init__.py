@@ -124,7 +124,7 @@ def detection_aware_collate_yolo(batch):
         idx_list.append(bi)
 
     if len(box_list) == 0:  # aucun objet dans le batch
-        batch_idx = torch.empty(0, dtype=torch.long)
+        batch_idx = torch.empty(0, dtype=torch.int32)
         cls       = torch.empty(0, 1, dtype=torch.float32)
         bboxes    = torch.empty(0, 4, dtype=torch.float32)
     else:
@@ -168,8 +168,11 @@ class CustomDatasetDataLoader:
         else:
             self.sampler = None
             shuffle = not opt.serial_batches
-
-        self.dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=opt.batch_size, shuffle=shuffle, sampler=self.sampler, num_workers=int(opt.num_threads),collate_fn=detection_aware_collate)
+        if "BBOX" in type(self.dataset).__name__:
+            collate_fn = detection_aware_collate_yolo
+        else : 
+            collate_fn=None
+        self.dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=opt.batch_size, shuffle=shuffle, sampler=self.sampler, num_workers=int(opt.num_threads),collate_fn=collate_fn)
 
     def load_data(self):
         return self

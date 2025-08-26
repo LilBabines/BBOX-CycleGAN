@@ -13,7 +13,7 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-yolo = YOLO("runs/yolo_less_empty2/weights/best.pt")
+yolo = YOLO("runs/yolo_less_empty/weights/best.pt")
 net = yolo.model                 
 net.eval()
 
@@ -30,6 +30,7 @@ transform = T.Compose([
 
 for p in net.parameters():
     p.requires_grad = False      
+
 def load_img_batch(
     dir_images: str,
     k: int = 8,
@@ -161,56 +162,58 @@ x,batch_y = load_img_batch("datasets/yolo_clean_less_empty/images/val")
 
 preds = net(x)
 
-loss_vec, _ = crit(preds,batch_y)
-print(loss_vec)
+im = preds.plot()
+im.show()
+# loss_vec, _ = crit(preds,batch_y)
+# print(loss_vec)
 
-loss = loss_vec.sum() / x.shape[0]  # moyenne par image
-print(loss)
-# loss.backward()
+# loss = loss_vec.sum() / x.shape[0]  # moyenne par image
+# print(loss)
+# # loss.backward()
 
 
-# feats = cartes de features (P3,P4,P5) renvoyées par le head
-feats = preds[1] if isinstance(preds, tuple) else preds
+# # feats = cartes de features (P3,P4,P5) renvoyées par le head
+# feats = preds[1] if isinstance(preds, tuple) else preds
 
-# reshape prédictions comme dans v8DetectionLoss
-no = net.model[-1].nc + net.model[-1].reg_max * 4
-pred_distri, pred_scores = torch.cat(
-    [xi.view(x.shape[0], no, -1) for xi in feats], 2
-).split((net.model[-1].reg_max * 4, net.model[-1].nc), 1)
+# # reshape prédictions comme dans v8DetectionLoss
+# no = net.model[-1].nc + net.model[-1].reg_max * 4
+# pred_distri, pred_scores = torch.cat(
+#     [xi.view(x.shape[0], no, -1) for xi in feats], 2
+# ).split((net.model[-1].reg_max * 4, net.model[-1].nc), 1)
 
-pred_scores = pred_scores.permute(0, 2, 1).sigmoid()  # (B,anchors,nc)
-pred_distri = pred_distri.permute(0, 2, 1)            # (B,anchors,reg_max*4)
+# pred_scores = pred_scores.permute(0, 2, 1).sigmoid()  # (B,anchors,nc)
+# pred_distri = pred_distri.permute(0, 2, 1)            # (B,anchors,reg_max*4)
 
-# ancrages (points d’ancrage et stride)
-from ultralytics.utils.tal import make_anchors
-anchor_points, stride_tensor = make_anchors(feats, net.model[-1].stride, 0.5)
+# # ancrages (points d’ancrage et stride)
+# from ultralytics.utils.tal import make_anchors
+# anchor_points, stride_tensor = make_anchors(feats, net.model[-1].stride, 0.5)
 
-# décoder boxes (distribution focal loss -> xyxy)
-from ultralytics.utils.loss import dist2bbox
-proj = torch.arange(net.model[-1].reg_max, device=x.device, dtype=torch.float)
-b, a, c = pred_distri.shape
-pred_dist = pred_distri.view(b, a, 4, c // 4).softmax(3).matmul(proj.type(pred_distri.dtype))
-pred_bboxes = dist2bbox(pred_dist, anchor_points, xywh=False) * stride_tensor  # (B,anchors,4)
+# # décoder boxes (distribution focal loss -> xyxy)
+# from ultralytics.utils.loss import dist2bbox
+# proj = torch.arange(net.model[-1].reg_max, device=x.device, dtype=torch.float)
+# b, a, c = pred_distri.shape
+# pred_dist = pred_distri.view(b, a, 4, c // 4).softmax(3).matmul(proj.type(pred_distri.dtype))
+# pred_bboxes = dist2bbox(pred_dist, anchor_points, xywh=False) * stride_tensor  # (B,anchors,4)
 
-# sélectionner les meilleures prédictions (exemple : top 5 par image)
-topk = 5
-scores, idxs = pred_scores.max(-1)   # max score de classe par anchor
-for i in range(x.shape[0]):
-    img = x[i].permute(1,2,0).cpu().numpy()
-    fig, ax = plt.subplots(1)
-    ax.imshow(img)
+# # sélectionner les meilleures prédictions (exemple : top 5 par image)
+# topk = 5
+# scores, idxs = pred_scores.max(-1)   # max score de classe par anchor
+# for i in range(x.shape[0]):
+#     img = x[i].permute(1,2,0).cpu().numpy()
+#     fig, ax = plt.subplots(1)
+#     ax.imshow(img)
 
-    # topk indices
-    conf, inds = scores[i].topk(topk)
-    for j, ind in enumerate(inds):
-        if conf[j] < 0.3:  # seuil de confiance
-            continue
-        box = pred_bboxes[i, ind].cpu().numpy()  # [x1,y1,x2,y2]
-        w, h = box[2]-box[0], box[3]-box[1]
-        rect = patches.Rectangle(
-            (box[0], box[1]), w, h,
-            linewidth=2, edgecolor='r', facecolor='none'
-        )
-        ax.add_patch(rect)
-        ax.text(box[0], box[1]-2, f"{conf[j]:.2f}", color='red', fontsize=8)
-    plt.show()
+#     # topk indices
+#     conf, inds = scores[i].topk(topk)
+#     for j, ind in enumerate(inds):
+#         if conf[j] < 0.3:  # seuil de confiance
+#             continue
+#         box = pred_bboxes[i, ind].cpu().numpy()  # [x1,y1,x2,y2]
+#         w, h = box[2]-box[0], box[3]-box[1]
+#         rect = patches.Rectangle(
+#             (box[0], box[1]), w, h,
+#             linewidth=2, edgecolor='r', facecolor='none'
+#         )
+#         ax.add_patch(rect)
+#         ax.text(box[0], box[1]-2, f"{conf[j]:.2f}", color='red', fontsize=8)
+#     plt.show()

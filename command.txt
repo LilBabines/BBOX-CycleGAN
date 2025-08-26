@@ -1,1 +1,3 @@
-python train.py --dataroot ./datasets/PlanetBBox1_Sent1B --name test_bbox --model bbox_cycle_gan --dataset_mode bbox_unaligned --output_nc 1 --lambda_identity 0 --display_freq 100
+python train.py --dataroot ./datasets/PlanetBBox1_Sent1B --name test_bbox --model bbox_cycle_gan --dataset_mode bbox_unaligned --output_nc 1 --lambda_identity 0 --display_freq 100 --checkpoints_dir ./runs --pretrained_path None
+
+python train.py --dataroot ./datasets/PlanetA_Sent1B_preprocress_2 --name PlanetA_Sent1B_preprocess_2 --model cycle_gan --dataset_mode unaligned --output_nc 1 --lambda_identity 0 --display_freq 100 --checkpoints_dir ./runs 

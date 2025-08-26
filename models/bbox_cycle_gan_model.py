@@ -4,6 +4,8 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+from ultralytics.utils.loss import v8DetectionLoss
+
 
 class BBOXCycleGANModel(BaseModel):
     """
@@ -99,8 +101,14 @@ class BBOXCycleGANModel(BaseModel):
             self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
-            
-        self.detector, self.criterionBBOX = networks.define_yolo(opt.detector_pt)
+
+        self.yolo = networks.define_yolo(opt.detector_pt)
+
+        self.detector = self.yolo.model
+
+        self.criterionBBOX = v8DetectionLoss(model=self.yolo.model)  
+
+        self.conf_tresh = opt.score_thresh
         
 
     def set_input(self, input):
@@ -116,12 +124,14 @@ class BBOXCycleGANModel(BaseModel):
         self.real_B = input["B" if AtoB else "A"].to(self.device)
         self.image_paths = input["A_paths" if AtoB else "B_paths"]
 
-        self.A_label = [{k: v.to(self.device) for k, v in t.items()} for t in input["A_label"]]
+        self.A_label = {k: v.to(self.device) for k, v in input["A_label"].items()}
 
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG_A(self.real_A)  # G_A(A)
+        x_detecor = self.fake_B.repeat(1,3,1,1) # to fake RGB
+        self.bbox_preds = self.detector((x_detecor+1)/2)
         self.rec_A = self.netG_B(self.fake_B)  # G_B(G_A(A))
         self.fake_A = self.netG_B(self.real_B)  # G_B(B)
         self.rec_B = self.netG_A(self.fake_A)  # G_A(G_B(B))
@@ -185,9 +195,9 @@ class BBOXCycleGANModel(BaseModel):
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
 
         #BBOX Part
-        print(self.fake_B.max(),self.fake_B.min())
-        preds = self.detector(self.fake_B)
-        loss = self.criterionBBOX(preds,self.A_label)
+        
+        loss_bbox,_ = self.criterionBBOX(self.bbox_preds,self.A_label)
+        self.loss_bbox  = loss_bbox.sum()
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B +self.loss_bbox
         self.loss_G.backward()
@@ -218,58 +228,17 @@ class BBOXCycleGANModel(BaseModel):
 
         fake_B = self.fake_B.repeat(1,3,1,1)
         real_B = self.real_B.repeat(1,3,1,1)
-        print(torch.min(fake_B).item())
-        print(torch.min(real_B).item())
 
-        print(torch.max(fake_B).item())
-        print(torch.max(real_B).item())
-        self.detector.eval()
-        preds_fake  = self.detector(fake_B /255)[0]
-        preds_real  = self.detector(real_B /255)[0]
-        print(preds_fake["boxes"].shape)
-        print(preds_real["boxes"].shape)
-        print("=================")
+        img_fake_B = (fake_B+1)/2#.byte()#.permute(0,2,3,1)
+        img_real_B = (real_B+1)/2#.byte()#.permute(0,2,3,1)
 
-        self.detector.train()
-        for m in self.detector.modules():
-            if isinstance(m, torch.nn.BatchNorm2d):
-                m.eval()
+        preds_fake  = self.yolo(img_fake_B, conf = self.conf_tresh, verbose=False)
+        preds_real  = self.yolo(img_real_B, conf = self.conf_tresh, verbose=False)
+      
+        for i, r in enumerate(preds_fake):
+            self.fake_B_bbox = r.plot()
 
+        for i, r in enumerate(preds_real):
+            self.real_B_bbox  = r.plot()
+   
         
-
-        pf = filter_preds(preds_fake,self.score_thresh)
-        pr = filter_preds(preds_real,self.score_thresh)
-
-        txt_f = [str(conf for conf in pf["scores"])]
-        txt_r = [str(conf for conf in pr["scores"])]
-
-        img_f = self.fake_B.to("cpu")
-        img_r = self.real_B.to("cpu")
-
-        # Dessiner les boîtes
-        if pf["boxes"].numel() > 0 :
-            self.fake_B_bbox = draw_bounding_boxes(img_f, pf["boxes"], labels=txt_f, width=2)
-        else :
-            self.fake_B_bbox = img_f
-
-        if pf["boxes"].numel() > 0 :
-            self.real_B_bbox = draw_bounding_boxes(img_r, pf["boxes"], labels=txt_f, width=2)
-        else :
-            self.real_B_bbox = img_r
-        
-
-
-
-def _to_uint8(img_float01):
-    # img_float01: Tensor[3,H,W] en [0,1]
-    return (img_float01.clamp(0,255)).to(torch.uint8)
-
-def filter_preds(p,score_thresh):
-        if p["scores"].numel() == 0:
-            return p
-        keep = p["scores"] >= score_thresh
-        return {
-            "boxes":  p["boxes"][keep].detach().cpu(),
-            "labels": p["labels"][keep].detach().cpu(),
-            "scores": p["scores"][keep].detach().cpu()
-        }

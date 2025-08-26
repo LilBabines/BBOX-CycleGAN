@@ -69,8 +69,8 @@ class BBOXUnalignedDataset(BaseDataset):
 
     def load_bbox(self, A_path, img_size):
 
-        stem = os.path.splitext(os.path.basename(image_path))[0]
-        txt_path = os.path.join(label_dir, stem + ".txt")
+        stem = os.path.splitext(os.path.basename(A_path))[0]
+        txt_path = os.path.join(self.dir_ALabel, stem + ".txt")
 
         boxes_xywh = []
         cls_list   = []
