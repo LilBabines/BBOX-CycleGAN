@@ -82,7 +82,5 @@ class YOLODataset(Dataset):
             "iscrowd": iscrowd
         }
 
-        # if self.transforms:
-        #     image = self.transforms(image)
 
         return image, target
