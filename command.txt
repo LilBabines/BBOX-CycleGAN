@@ -1,1 +1,1 @@
-!python train.py --dataroot ./dataset --name test --model cycle_gan
+python train.py --dataroot ./datasets/PlanetBBox1_Sent1B --name test_bbox --model bbox_cycle_gan --dataset_mode bbox_unaligned --output_nc 1 --lambda_identity 0 --display_freq 100

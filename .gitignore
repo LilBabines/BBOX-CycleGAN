@@ -48,4 +48,6 @@ wandb/
 # igtnore data
 dataset/
 
+*.pt
 *.csv
+runs/

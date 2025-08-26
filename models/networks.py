@@ -3,6 +3,9 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
+import torchvision
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
 
 
 ###############################################################################
@@ -127,6 +130,65 @@ def init_net(net, init_type="normal", init_gain=0.02):
             print("Initialized with device cuda:0")
     init_weights(net, init_type, init_gain=init_gain)
     return net
+
+def define_detector():
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.COCO_V1)
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 2)
+    return model
+
+def define_frozen_detector(detector_pt,num_classes=2, device = "cuda"):
+    det = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+        weights=None
+    )
+    in_features = det.roi_heads.box_predictor.cls_score.in_features
+    det.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    state_dict = torch.load(detector_pt, map_location="cpu", weights_only=True)
+    det.load_state_dict(state_dict)
+
+    # Geler tous les poids
+    for p in det.parameters():
+        p.requires_grad = False
+
+    det.train()
+    det.to(device)
+    for m in det.modules():
+        if isinstance(m, torch.nn.BatchNorm2d):
+            m.eval()
+    
+    return det
+
+def define_yolo(path_to_best_pt):
+    from ultralytics import YOLO
+    yolo = YOLO(path_to_best_pt)
+    net = yolo.model                 
+    net.eval()
+    m = net.model[-1]  
+    
+    print("\nYOLO args : ")
+    print("nc:", m.nc, "reg_max:", getattr(m, "reg_max", 1), "stride:", m.stride)
+    print("has args:", hasattr(net, "args"),"\n")  
+
+    for p in net.parameters():
+        p.requires_grad = False      
+
+    h = net.args
+    if isinstance(h, dict):
+        
+        box = h.get("box", 7.5)
+        cls = h.get("cls", 0.5)
+        dfl = h.get("dfl", 1.5)
+
+        net.args = SimpleNamespace(**h)
+        net.args.box = box
+        net.args.cls = cls
+        net.args.dfl = dfl
+    crit = v8DetectionLoss(model=yolo.model)  
+
+    return net,crit 
+
+
 
 
 def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, init_type="normal", init_gain=0.02):
@@ -586,3 +648,5 @@ class PixelDiscriminator(nn.Module):
     def forward(self, input):
         """Standard forward."""
         return self.net(input)
+
+
