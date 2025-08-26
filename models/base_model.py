@@ -109,6 +109,25 @@ class BaseModel(ABC):
                         self.__patch_instance_norm_state_dict(state_dict, net, key.split("."))
                     net.load_state_dict(state_dict)
 
+                #load network from pre-training
+                if opt.pretrained_path is not None:
+                    
+                    load_filename = f"latest_net_{name}.pth"
+                    load_path = Path(opt.pretrained_path )/ load_filename
+
+                    if isinstance(net, torch.nn.parallel.DistributedDataParallel):
+                        net = net.module
+                    print(f"loading the model from {load_path}")
+
+                    state_dict = torch.load(load_path, map_location=str(self.device), weights_only=True)
+
+                    if hasattr(state_dict, "_metadata"):
+                        del state_dict._metadata
+
+                    # patch InstanceNorm checkpoints
+                    for key in list(state_dict.keys()):
+                        self.__patch_instance_norm_state_dict(state_dict, net, key.split("."))
+                    net.load_state_dict(state_dict)
                 # Move network to device
                 net.to(self.device)
 
@@ -180,6 +199,7 @@ class BaseModel(ABC):
         for name in self.loss_names:
             if isinstance(name, str):
                 errors_ret[name] = float(getattr(self, "loss_" + name))  # float(...) works for both scalar tensor and float number
+            
         return errors_ret
 
     def save_networks(self, epoch):
